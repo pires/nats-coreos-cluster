@@ -1,0 +1,49 @@
+#cloud-config
+coreos:
+  etcd2:
+    discovery: __DISC_TOKEN__
+    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    advertise-client-urls: http://$private_ipv4:2379
+    listen-peer-urls: http://$private_ipv4:2380,http://$private_ipv4:7001
+    initial-advertise-peer-urls: http://$private_ipv4:2380
+  fleet:
+    etcd_request_timeout: 10  
+  units:
+    - name: etcd2.service
+      command: start
+    - name: fleet.service
+      command: start
+    - name: nats-discovery.service
+      command: start
+      content: |
+        [Unit]
+        Requires=etcd2.service fleet.service docker.service
+        After=etcd2.service fleet.service docker.service
+
+        [Service]
+        EnvironmentFile=/etc/environment
+        ExecStart=/bin/sh -c "while true; do etcdctl set /announce/services/nats-${COREOS_PRIVATE_IPV4} ${COREOS_PRIVATE_IPV4} --ttl 60; sleep 45; done"
+        ExecStop=/usr/bin/etcdctl rm /announce/services/nats-${COREOS_PRIVATE_IPV4}
+    - name: nats.service
+      command: start
+      content: |
+        [Unit]
+        Requires=nats-discovery.service
+        BindsTo=nats-discovery.service
+
+        [Service]
+        EnvironmentFile=/etc/environment
+        TimeoutStartSec=0
+        ExecStartPre=-/usr/bin/docker kill nats
+        ExecStartPre=-/usr/bin/docker rm nats
+        ExecStartPre=/usr/bin/docker pull nats:0.7.2
+        ExecStart=/bin/sh -c '/usr/bin/docker run --name nats \
+            --net host \
+            nats:0.7.2 \
+            -DV \
+            --routes=$(/usr/bin/etcdctl ls /announce/services | \
+                xargs -I {} /usr/bin/etcdctl get {} | \
+                sed s#^#nats-route://ruser:T0pS3cr3t@# | sed s#$\#:6222# | \
+                tr "\n" "," | \
+                sed s"/.$//")'
+        ExecStop=/usr/bin/docker stop nats

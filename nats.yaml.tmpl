@@ -36,7 +36,7 @@ coreos:
         TimeoutStartSec=0
         ExecStartPre=-/usr/bin/docker kill nats
         ExecStartPre=-/usr/bin/docker rm nats
-        ExecStartPre=/usr/bin/docker pull nats:0.7.2
+        ExecStartPre=/usr/bin/docker pull nats:0.9.2
         ExecStart=/bin/sh -c '/usr/bin/docker run --name nats \
             --net host \
             nats:0.7.2 \
